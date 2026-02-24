@@ -1,4 +1,5 @@
 using System;
+using System.Security.Cryptography;
 using PinnedMemory;
 
 namespace Poly1305.NetCore
@@ -19,7 +20,7 @@ namespace Poly1305.NetCore
     /// href="https://github.com/floodyberry/poly1305-donna">poly1305-donna-unrolled</a> C implementation
     /// by Andrew M (@floodyberry).
     /// </remarks>
-    public class Poly1305 : IDisposable
+    public sealed class Poly1305 : IDisposable
     {
         // Initialised state
         private const int BlockSize = 16;
@@ -89,10 +90,7 @@ namespace Poly1305.NetCore
             k3 = LE_To_UInt32(key, BlockSize + 12);
         }
 
-        public int GetLength()
-        {
-            return BlockSize;
-        }
+        public int GetLength() => BlockSize;
 
         public void Update(byte input)
         {
@@ -102,12 +100,21 @@ namespace Poly1305.NetCore
 
         public void UpdateBlock(PinnedMemory<byte> input, int inOff, int len)
         {
+            if (input == null)
+                throw new ArgumentNullException(nameof(input));
+
             UpdateBlock(input.ToArray(), inOff, len);
-            input.Dispose();
         }
 
         public void UpdateBlock(byte[] input, int inOff, int len)
         {
+            if (input == null)
+                throw new ArgumentNullException(nameof(input));
+            if (inOff < 0 || inOff > input.Length)
+                throw new ArgumentOutOfRangeException(nameof(inOff));
+            if (len < 0 || inOff + len > input.Length)
+                throw new ArgumentOutOfRangeException(nameof(len));
+
             var copied = 0;
             while (len > copied)
             {
@@ -169,6 +176,9 @@ namespace Poly1305.NetCore
 
         public void DoFinal(PinnedMemory<byte> output, int outOff)
         {
+            if (output == null)
+                throw new ArgumentNullException(nameof(output));
+
             DataLength(output, outOff, BlockSize, "Output buffer is too short.");
 
             if (_currentBlockOffset > 0)
@@ -226,7 +236,7 @@ namespace Poly1305.NetCore
             return ((ulong)i1) * i2;
         }
 
-        private uint LE_To_UInt32(byte[] bs, int off)
+        private static uint LE_To_UInt32(byte[] bs, int off)
         {
             return (uint)bs[off]
                    | (uint)bs[off + 1] << 8
@@ -234,7 +244,7 @@ namespace Poly1305.NetCore
                    | (uint)bs[off + 3] << 24;
         }
 
-        private uint LE_To_UInt32(PinnedMemory<byte> bs, int off)
+        private static uint LE_To_UInt32(PinnedMemory<byte> bs, int off)
         {
             return (uint)bs[off]
                    | (uint)bs[off + 1] << 8
@@ -242,27 +252,7 @@ namespace Poly1305.NetCore
                    | (uint)bs[off + 3] << 24;
         }
 
-        private ulong LE_To_UInt64(PinnedMemory<byte> bs, int off)
-        {
-            var lo = LE_To_UInt32(bs, off);
-            var hi = LE_To_UInt32(bs, off + 4);
-            return ((ulong)hi << 32) | (ulong)lo;
-        }
-
-        private PinnedMemory<byte> UInt64_To_LE(ulong n)
-        {
-            var bs = new PinnedMemory<byte>(new byte[8]);
-            UInt64_To_LE(n, bs, 0);
-            return bs;
-        }
-
-        private void UInt64_To_LE(ulong n, PinnedMemory<byte> bs, int off)
-        {
-            UInt32_To_LE((uint)(n), bs, off);
-            UInt32_To_LE((uint)(n >> 32), bs, off + 4);
-        }
-
-        private void UInt32_To_LE(uint n, PinnedMemory<byte> bs, int off)
+        private static void UInt32_To_LE(uint n, PinnedMemory<byte> bs, int off)
         {
             bs[off] = (byte)(n);
             bs[off + 1] = (byte)(n >> 8);
@@ -270,15 +260,20 @@ namespace Poly1305.NetCore
             bs[off + 3] = (byte)(n >> 24);
         }
 
-        private void DataLength(PinnedMemory<byte> buf, int off, int len, string msg)
+        private static void DataLength(PinnedMemory<byte> buf, int off, int len, string msg)
         {
-            if (off + len > buf.Length)
-                throw new Exception(msg);
+            if (off < 0 || len < 0 || off + len > buf.Length)
+                throw new ArgumentOutOfRangeException(nameof(off), msg);
         }
 
         public void Dispose()
         {
             Reset();
+            CryptographicOperations.ZeroMemory(_singleByte);
+            CryptographicOperations.ZeroMemory(_currentBlock);
+            k0 = k1 = k2 = k3 = 0;
+            r0 = r1 = r2 = r3 = r4 = 0;
+            s1 = s2 = s3 = s4 = 0;
             _singleBytePin?.Dispose();
             _currentBlockPin?.Dispose();
         }

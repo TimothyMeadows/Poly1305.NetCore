@@ -1,60 +1,68 @@
-﻿using System;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Security;
+using System.Security.Cryptography;
 using System.Text;
 using PinnedMemory;
 
-namespace Poly1305.NetCore.Examples.Examples
+namespace Poly1305.NetCore.Examples.Examples;
+
+public static class StringExample
 {
-    public static class StringExample
+    private static readonly byte[] ExampleKey =
     {
-        // Strings are very unsafe to store passwords, or keys in. This is because strings in .NET will always be subject to garbage collection
-        // which means they can always be dumped out of memory onto disk through various methods, and exploits. However, especially when dealing
-        // with website logins through forms. It's almost impossible to avoid the risk completely. Below are some examples of best dealing with 
-        // these conditions. Ultimately however, if you can record your secure input directly in byte, char, or SecureString you will always be better off.
-        public static void Poly()
+        0x85, 0xd6, 0xbe, 0x78, 0x57, 0x55, 0x6d, 0x33,
+        0x7f, 0x44, 0x52, 0xfe, 0x42, 0xd5, 0x06, 0xa8,
+        0x01, 0x03, 0x80, 0x8a, 0xfb, 0x0d, 0xf1, 0xce,
+        0xbf, 0xf9, 0x89, 0x7d, 0xe1, 0x45, 0x52, 0x4a
+    };
+
+    public static void Poly()
+    {
+        using var poly = new Poly1305(new PinnedMemory<byte>(ExampleKey, false));
+        using var hash = new PinnedMemory<byte>(new byte[poly.GetLength()]);
+
+        const string unsafeCaw = "caw caw caw";
+        var cawBytes = Encoding.UTF8.GetBytes(unsafeCaw);
+        using var caw = new PinnedMemory<byte>(cawBytes, false);
+        poly.UpdateBlock(caw, 0, caw.Length);
+        poly.DoFinal(hash, 0);
+        CryptographicOperations.ZeroMemory(cawBytes);
+
+        Console.WriteLine(BitConverter.ToString(hash.ToArray()));
+
+        using var exampleHash2 = new PinnedMemory<byte>(new byte[poly.GetLength()]);
+        using var secureCaw = new SecureString();
+        foreach (var c in "caw caw caw")
         {
-            using var poly = new Poly1305(new PinnedMemory<byte>(new byte[] { 63, 61, 77, 20, 63, 61, 77 }, false));
-            using var hash = new PinnedMemory<byte>(new byte[poly.GetLength()]);
+            secureCaw.AppendChar(c);
+        }
 
-            var unsafeCaw = "caw caw caw"; // this is unsafe because string's can't be pinned and are subject to garbage collection, and being written to disk (pagefile).
-            var caw = new PinnedMemory<byte>(Encoding.UTF8.GetBytes(unsafeCaw), false); // this is now safe but ONLY the variable caw, unsafeCaw is STILL exposed.
-            unsafeCaw = string.Empty; // unsafeCaw COULD STILL exposed even tho we set it to empty because this depends on garbage collection getting around to clearing it.
-            poly.UpdateBlock(caw, 0, caw.Length);
-            poly.DoFinal(hash, 0);
+        secureCaw.MakeReadOnly();
 
-            Console.WriteLine(BitConverter.ToString(hash.ToArray()));
-
-            // This is a more uncommon but should be safer example of how to use strings with SecureString for input.
-            using var exampleHash2 = new PinnedMemory<byte>(new byte[poly.GetLength()]);
-
-            var secureCaw = new SecureString();
-            secureCaw.AppendChar('c');
-            secureCaw.AppendChar('a');
-            secureCaw.AppendChar('w');
-            secureCaw.AppendChar(' ');
-            secureCaw.AppendChar('c');
-            secureCaw.AppendChar('a');
-            secureCaw.AppendChar('w');
-            secureCaw.AppendChar(' ');
-            secureCaw.AppendChar('c');
-            secureCaw.AppendChar('a');
-            secureCaw.AppendChar('w');
-            secureCaw.MakeReadOnly();
-
+        var cawPointer = IntPtr.Zero;
+        try
+        {
             using var pinnedCaw = new PinnedMemory<char>(new char[secureCaw.Length]);
-            var cawPointer = Marshal.SecureStringToBSTR(secureCaw);
-            for (var i = 0; i <= secureCaw.Length - 1; i++)
+            cawPointer = Marshal.SecureStringToBSTR(secureCaw);
+            for (var i = 0; i < secureCaw.Length; i++)
             {
-                var c = (char)Marshal.ReadByte(cawPointer, i * 2);
-                pinnedCaw[i] = c;
+                pinnedCaw[i] = (char)Marshal.ReadInt16(cawPointer, i * sizeof(char));
             }
 
-            using var pinnedCawBytes = new PinnedMemory<byte>(Encoding.UTF8.GetBytes(pinnedCaw.ToArray()), false);
-            poly.UpdateBlock(pinnedCawBytes, 0, secureCaw.Length);
+            var secureBytes = Encoding.UTF8.GetBytes(pinnedCaw.ToArray());
+            using var pinnedCawBytes = new PinnedMemory<byte>(secureBytes, false);
+            poly.UpdateBlock(pinnedCawBytes, 0, pinnedCawBytes.Length);
             poly.DoFinal(exampleHash2, 0);
-            Console.WriteLine(BitConverter.ToString(exampleHash2.ToArray()));
+            CryptographicOperations.ZeroMemory(secureBytes);
         }
+        finally
+        {
+            if (cawPointer != IntPtr.Zero)
+            {
+                Marshal.ZeroFreeBSTR(cawPointer);
+            }
+        }
+
+        Console.WriteLine(BitConverter.ToString(exampleHash2.ToArray()));
     }
 }
