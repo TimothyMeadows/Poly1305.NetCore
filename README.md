@@ -1,7 +1,7 @@
 # Poly1305.NetCore
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![nuget](https://img.shields.io/nuget/v/Poly1305.NetCore.svg)](https://www.nuget.org/packages/Poly1305.NetCore/)
 
-Implementation of poly1305-dona message authentication code, designed by D. J. Bernstein. Optimized for [PinnedMemory](https://github.com/TimothyMeadows/PinnedMemory).
+Implementation of the Poly1305 one-time message authentication code, designed by D. J. Bernstein and standardized in RFC 8439. Optimized for [PinnedMemory](https://github.com/TimothyMeadows/PinnedMemory).
 
 # Install
 
@@ -23,10 +23,17 @@ https://www.nuget.org/packages/Poly1305.NetCore/
 You can find more examples in the github examples project.
 
 ```csharp
-using var poly = new Poly1305(new PinnedMemory<byte>(new byte[] {63, 61, 77, 20, 63, 61, 77}, false));
-using var hash = new PinnedMemory<byte>(new byte[digest.GetLength()]);
-digest.UpdateBlock(new PinnedMemory<byte>(new byte[] {63, 61, 77, 20, 63, 61, 77, 20, 63, 61, 77}, false), 0, 11);
-digest.DoFinal(hash, 0);
+var key = new byte[] {
+    0x85, 0xd6, 0xbe, 0x78, 0x57, 0x55, 0x6d, 0x33,
+    0x7f, 0x44, 0x52, 0xfe, 0x42, 0xd5, 0x06, 0xa8,
+    0x01, 0x03, 0x80, 0x8a, 0xfb, 0x0d, 0xf1, 0xce,
+    0xbf, 0xf9, 0x89, 0x7d, 0xe1, 0x45, 0x52, 0x4a
+};
+
+using var poly = new Poly1305(new PinnedMemory<byte>(key, false));
+using var hash = new PinnedMemory<byte>(new byte[poly.GetLength()]);
+poly.UpdateBlock(new byte[] {63, 61, 77, 20, 63, 61, 77, 20, 63, 61, 77}, 0, 11);
+poly.DoFinal(hash, 0);
 ```
 
 # Constructor
@@ -76,3 +83,10 @@ Clear key & salt, reset digest back to it's initial state.
 ```csharp
 void Dispose()
 ```
+
+
+## Security Notes
+
+- Poly1305 is a **one-time authenticator**: never reuse the same (r, s) key pair for different messages (RFC 8439).
+- This library clears internal state in `Dispose()`; callers are still responsible for lifecycle and secure generation/storage of keys.
+- Compare authentication tags using constant-time methods such as `CryptographicOperations.FixedTimeEquals`.
