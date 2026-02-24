@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Poly1305.NetCore", "Poly130
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Poly1305.NetCore.Examples", "Poly1305.NetCore.Examples\Poly1305.NetCore.Examples.csproj", "{9ED6DD07-BB8B-4A77-B1BA-3D48D06855A0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Poly1305.NetCore.Tests", "Poly1305.NetCore.Tests\Poly1305.NetCore.Tests.csproj", "{77F79229-FF13-4622-B878-07EFCAE0909E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{9ED6DD07-BB8B-4A77-B1BA-3D48D06855A0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9ED6DD07-BB8B-4A77-B1BA-3D48D06855A0}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9ED6DD07-BB8B-4A77-B1BA-3D48D06855A0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{77F79229-FF13-4622-B878-07EFCAE0909E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{77F79229-FF13-4622-B878-07EFCAE0909E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{77F79229-FF13-4622-B878-07EFCAE0909E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{77F79229-FF13-4622-B878-07EFCAE0909E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
