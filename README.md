@@ -3,21 +3,37 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![NuGet](https://img.shields.io/nuget/v/Poly1305.NetCore.svg)](https://www.nuget.org/packages/Poly1305.NetCore/)
 
-`Poly1305.NetCore` is a .NET 8 implementation of the Poly1305 one-time message authentication code (MAC), originally designed by D. J. Bernstein and standardized in RFC 8439.
+`Poly1305.NetCore` is a .NET implementation of the [Poly1305](https://datatracker.ietf.org/doc/html/rfc8439) one-time message authentication code (MAC).
 
-This package is built around the [`PinnedMemory`](https://github.com/TimothyMeadows/PinnedMemory) type to support memory pinning and explicit lifecycle control for sensitive material.
+The implementation uses [`PinnedMemory`](https://github.com/TimothyMeadows/PinnedMemory) for memory pinning and explicit lifecycle control of sensitive material.
 
-## Features
+---
 
-- Poly1305 MAC implementation with 16-byte authentication tag output.
-- Uses a 32-byte key (`r || s`) with internal Poly1305 clamping.
-- Supports incremental updates (`Update`, `UpdateBlock`) for streamed input.
-- Clears internal state on `Dispose()`.
-- Includes example app and RFC vector-based tests in this repository.
+## Table of contents
+
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [API reference](#api-reference)
+- [Behavior notes](#behavior-notes)
+- [Best practices](#best-practices)
+- [Validation and test vectors](#validation-and-test-vectors)
+- [Development](#development)
+- [Security notes](#security-notes)
+- [License](#license)
+
+---
+
+## Requirements
+
+- **.NET 8 SDK** for building and testing this repository.
+- Target runtime/framework for this package: **.NET 8**.
+
+---
 
 ## Installation
 
-### .NET CLI
+### NuGet Package Manager (CLI)
 
 ```bash
 dotnet add package Poly1305.NetCore
@@ -29,18 +45,16 @@ dotnet add package Poly1305.NetCore
 Install-Package Poly1305.NetCore
 ```
 
-### NuGet
+### NuGet Gallery
 
-https://www.nuget.org/packages/Poly1305.NetCore/
+- https://www.nuget.org/packages/Poly1305.NetCore/
 
-## Requirements
+---
 
-- .NET 8.0+
-- `PinnedMemory` dependency (pulled transitively from NuGet)
-
-## Quick Start
+## Quick start
 
 ```csharp
+using System;
 using Poly1305.NetCore;
 using PinnedMemory;
 
@@ -52,16 +66,21 @@ var key = new byte[]
     0xbf, 0xf9, 0x89, 0x7d, 0xe1, 0x45, 0x52, 0x4a
 };
 
-using var poly = new Poly1305(new PinnedMemory<byte>(key, false));
-using var tag = new PinnedMemory<byte>(new byte[poly.GetLength()]);
+var message = new byte[] { 63, 61, 77, 20, 63, 61, 77, 20, 63, 61, 77 };
 
-poly.UpdateBlock(new byte[] { 63, 61, 77, 20, 63, 61, 77, 20, 63, 61, 77 }, 0, 11);
-poly.DoFinal(tag, 0);
+using var poly1305 = new Poly1305(new PinnedMemory<byte>(key, false));
+using var tag = new PinnedMemory<byte>(new byte[poly1305.GetLength()]);
 
-// tag now contains the 16-byte MAC
+poly1305.UpdateBlock(message, 0, message.Length);
+poly1305.DoFinal(tag, 0);
+
+var tagHex = Convert.ToHexString(tag.ToArray()).ToLowerInvariant();
+Console.WriteLine(tagHex);
 ```
 
-## API Overview
+---
+
+## API reference
 
 ### Constructor
 
@@ -69,72 +88,110 @@ poly.DoFinal(tag, 0);
 Poly1305(PinnedMemory<byte> key)
 ```
 
-- `key` must be exactly 32 bytes.
+- `key` must be exactly **32 bytes** (`r || s`).
+- The lower half (`r`) is clamped internally per the Poly1305 specification.
 
-### Instance methods
-
-```csharp
-int GetLength()
-```
-Returns output tag length in bytes (always `16`).
+### Core methods
 
 ```csharp
 void Update(byte input)
-```
-Adds a single byte to the current MAC state.
-
-```csharp
 void UpdateBlock(byte[] input, int inOff, int len)
 void UpdateBlock(PinnedMemory<byte> input, int inOff, int len)
-```
-Adds a range of bytes to the current MAC state.
-
-```csharp
 void DoFinal(PinnedMemory<byte> output, int outOff)
-```
-Writes the tag to `output` at `outOff` and resets message accumulator state.
-
-```csharp
 void Reset()
-```
-Resets message accumulator state while keeping the current key.
-
-```csharp
+int GetLength()
 void Dispose()
 ```
-Clears internal state (including key material) and disposes internal pinned buffers.
 
-## Usage Notes
+### Output details
 
-- `DoFinal` finalizes the current message and then resets accumulator state, so the instance can process a new message with the same key.
-- Use a new one-time key for each message (or each `(key, nonce)` derivation in protocols such as ChaCha20-Poly1305).
-- Prefer `CryptographicOperations.FixedTimeEquals` when verifying tags.
+- `GetLength()` returns the tag size in **bytes**.
+- The Poly1305 tag size is always **16 bytes**.
 
-## Security Notes
+---
 
-- Poly1305 is a **one-time authenticator**. Reusing the same Poly1305 one-time key for multiple different messages breaks security assumptions.
-- This library zeroes internal buffers during `Dispose()`, but callers are still responsible for secure key generation, storage, and disposal of external buffers.
-- Do not treat Poly1305 as encryption; it provides integrity/authentication only.
+## Behavior notes
 
-## Examples and Tests
+- `DoFinal(...)` finalizes the current message and then resets the accumulator state.
+- `Reset()` clears message-specific state while preserving the current key.
+- `Dispose()` zeroes and releases internal buffers, including key material.
 
-- Runnable examples: `Poly1305.NetCore.Examples/`
-- Test suite with RFC vectors: `Poly1305.NetCore.Tests/`
+---
 
-From repository root:
+## Best practices
+
+### 1) Treat Poly1305 keys as one-time keys
+
+- Poly1305 is a **one-time authenticator**.
+- Reusing the same one-time key for different messages breaks security assumptions.
+
+### 2) Use protocol-safe key derivation
+
+- In modern protocols (for example ChaCha20-Poly1305), the Poly1305 one-time key is derived per message from a nonce and master key.
+- Do not manually reuse a static 32-byte Poly1305 key across messages.
+
+### 3) Verify tags in constant time
+
+- Use `CryptographicOperations.FixedTimeEquals` when comparing tags.
+- Avoid `SequenceEqual` or direct equality checks for secret-dependent comparisons.
+
+### 4) Process large inputs incrementally
+
+- Feed data via repeated `UpdateBlock(...)` calls for streaming scenarios.
+- Avoid buffering full files/messages in memory when not necessary.
+
+### 5) Dispose promptly
+
+- Use `using` blocks for `Poly1305` and sensitive buffers.
+- Dispose early when key material is no longer needed.
+
+---
+
+## Validation and test vectors
+
+The test project validates behavior against RFC 8439 vectors and message processing semantics.
+
+- RFC-based known answer vectors.
+- Incremental update behavior (`Update` + `UpdateBlock`).
+- Finalization and reset behavior.
+
+Run from repository root:
 
 ```bash
-dotnet run --project Poly1305.NetCore.Examples
-dotnet test
+dotnet test Poly1305.NetCore.sln
 ```
+
+---
 
 ## Development
 
+### Restore
+
 ```bash
-dotnet restore
-dotnet build
-dotnet test
+dotnet restore Poly1305.NetCore.sln
 ```
+
+### Build
+
+```bash
+dotnet build Poly1305.NetCore.sln
+```
+
+### Test
+
+```bash
+dotnet test Poly1305.NetCore.sln
+```
+
+---
+
+## Security notes
+
+- `Poly1305.NetCore` provides message authentication/integrity, not encryption.
+- Ensure your full protocol defines nonce handling, key derivation, and replay protections.
+- The library clears internal state on disposal, but callers remain responsible for secure key generation, storage, and external buffer handling.
+
+---
 
 ## License
 
